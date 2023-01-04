@@ -9,6 +9,8 @@
 #define INC_RINGBUFFER_H_
 
 #include <stdio.h>
+#include <string.h>
+
 #include "usart.h"
 
 #define BUFF_SIZE 16
