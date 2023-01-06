@@ -67,6 +67,7 @@ int main(void)
   /* USER CODE BEGIN 1 */
 	uint32_t rxBytes = 0;
 	uint32_t value = 0;
+	uint8_t name[32] = {0};
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -117,6 +118,19 @@ int main(void)
 		  if(buff_RXextractUI32("Value=", strlen("Value="), &value))
 		  {
 			  printf("%ld\r\n", value);
+		  }
+
+		  value = buff_RXextractString("Name=", strlen("Name="), name, 5);
+		  if(value > 0)
+		  {
+			  name[value] = '\0';
+			  printf("%s\r\n", (char*)name);
+		  }
+		  value = buff_RXcopyString(name, 16);
+		  if(value > 0)
+		  {
+			  name[value] = '\0';
+			  printf("%s", (char*)name);
 		  }
 	  }
 
