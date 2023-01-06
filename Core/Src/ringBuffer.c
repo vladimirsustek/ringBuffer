@@ -119,6 +119,118 @@ uint32_t buff_RXcompare(char* keyWord, uint32_t lng)
 }
 
 
+uint32_t buff_RXextractUI32(char* keyWord, uint32_t keyLng, uint32_t *num)
+{
+	uint32_t match = 0;
+	uint32_t number = 0;
+	uint8_t strNum[11] = {0};
+	const uint32_t min_lng = 1;
+
+	for(uint32_t auxIdx = 0; auxIdx  < messageIndex; auxIdx++)
+	{
+		uint8_t* pBegin = messagePointers[auxIdx].pBegin;
+		uint8_t* pEnd = messagePointers[auxIdx].pEnd;
+
+		if(pEnd > pBegin)
+		{
+			if(keyLng + min_lng <= pEnd - pBegin)
+			{
+				if(0 == memcmp(keyWord, pBegin, keyLng))
+				{
+
+					for(uint32_t didx = 0; didx < (uint32_t)(pEnd - pBegin - keyLng); didx++)
+					{
+						if((pBegin[keyLng + didx] < '0') || (pBegin[keyLng + didx] > '9') || (didx > 10))
+						{
+							break;
+						}
+						else
+						{
+							match = 1;
+							strNum[didx] = pBegin[keyLng + didx];
+						}
+					}
+
+					buff_RemoveElement(auxIdx);
+
+					break;
+				}
+			}
+		}
+		else
+		{
+			uint32_t firstPartLng = BUFF_SIZE - ((uint32_t)pBegin - (uint32_t)intBuffer);
+			if(keyLng  + min_lng <= firstPartLng + (pEnd - intBuffer))
+			{
+				if(0 == memcmp(keyWord, pBegin, keyLng) ||
+				  (0 == memcmp(keyWord, pBegin, firstPartLng) &&
+				   0 == memcmp(keyWord + firstPartLng, intBuffer, keyLng-firstPartLng)))
+				{
+					uint32_t didx = 0;
+
+					uint32_t wrapKeyWordLng = keyLng - firstPartLng;
+
+					/* Number starts in "first part" and continues to the second part*/
+					if(keyLng < firstPartLng)
+					{
+						for(didx = 0; didx < firstPartLng - keyLng; didx++)
+						{
+							if((pBegin[keyLng + didx] < '0') || (pBegin[keyLng + didx] > '9') || (didx > 10))
+							{
+								break;
+							}
+							else
+							{
+								match = 1;
+								strNum[didx] = pBegin[keyLng + didx];
+							}
+						}
+
+						wrapKeyWordLng = 0;
+					}
+					for(uint32_t didx2 = 0; didx2 < (uint32_t)(pEnd - intBuffer); didx2++)
+					{
+						if((intBuffer[wrapKeyWordLng + didx2] < '0') ||
+								(intBuffer[wrapKeyWordLng + didx2] > '9') ||
+								(didx + didx2 > 10))
+						{
+							break;
+						}
+						else
+						{
+							match = 1;
+							strNum[didx2 + didx] = intBuffer[wrapKeyWordLng + didx2];
+						}
+					}
+					buff_RemoveElement(auxIdx);
+					break;
+				}
+			}
+
+		}
+	}
+
+	if(strlen((char*)strNum))
+	{
+		uint32_t maxDec = 1;
+		for(uint32_t dec = 1; dec < strlen((char*)strNum); dec++)
+		{
+			maxDec *= 10;
+		}
+
+		for(uint32_t digit = 0; digit < strlen((char*)strNum); digit++)
+		{
+			number += maxDec * (strNum[digit] - '0');
+			maxDec /= 10;
+		}
+
+		*num = number;
+	}
+
+	return number;
+}
+
+
 static void buff_RemoveElement(uint32_t idx)
 {
     uint32_t outdated = 0;

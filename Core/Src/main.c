@@ -66,6 +66,7 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
 	uint32_t rxBytes = 0;
+	uint32_t value = 0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -111,6 +112,11 @@ int main(void)
 		  if(buff_RXcompare("Hojsahej", strlen("Hojsahej")))
 		  {
 			  printf("Match\n");
+		  }
+
+		  if(buff_RXextractUI32("Value=", strlen("Value="), &value))
+		  {
+			  printf("%ld\r\n", value);
 		  }
 	  }
 
