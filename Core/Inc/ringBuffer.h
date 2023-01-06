@@ -14,7 +14,7 @@
 #include "usart.h"
 
 #define BUFF_SIZE 16
-#define MESSAGE_BUFFER_SIZE 8
+#define MESSAGE_BUFFER_SIZE (BUFF_SIZE / 3)
 #define TERMINATION_LNG 2
 
 #define FETCH_TIMEOUT (uint32_t)(-2)

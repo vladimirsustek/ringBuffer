@@ -20,7 +20,7 @@ static uint32_t      bufferWrapped = 0;
 
 #define INDEX_ALREADY_WRAPPED        ((readPtr + 1) % BUFF_SIZE == 0)
 #define WRAPPED_BYTE_NOT_RECEIVED    (RX_CNT == 0)
-#define RECEIVED_TOO_LESS            (RX_CNT - readPtr < 2)
+#define RECEIVED_TOO_LESS_BYTES      (RX_CNT - readPtr < 2)
 
 typedef struct terminationWord
 {
@@ -30,46 +30,33 @@ typedef struct terminationWord
 	uint32_t readPtr_1;
 } terminationWord_t;
 
+static void buff_RemoveElement(uint32_t idx);
+
 terminationWord_t debugStr[128] = {0};
 uint32_t debugStrIdx = 0;
 
 uint32_t buff_RXfetch(void)
 {
-	uint32_t acc = 0;
+	uint32_t recvBytes = 0;
 	static uint8_t* auxBegin = intBuffer;
 	uint8_t* auxEnd = NULL;
 
-	while(readPtr != RX_CNT)
+	while(readPtr != RX_CNT && messageIndex < MESSAGE_BUFFER_SIZE)
 	{
-		if((INDEX_ALREADY_WRAPPED && WRAPPED_BYTE_NOT_RECEIVED) || RECEIVED_TOO_LESS)
+		if((INDEX_ALREADY_WRAPPED && WRAPPED_BYTE_NOT_RECEIVED) || RECEIVED_TOO_LESS_BYTES)
 		{
 			return 0;
 		}
-
-		/* Safety when loop "gets stuck" - impossible to receive more
-		 * than BUFF_SIZE at once but calculation may get wrong */
-		if(acc > BUFF_SIZE)
+		if(recvBytes > BUFF_SIZE)
 		{
 			break;
 		}
-
-		//__ISB();
-	    //debugStr[debugStrIdx].cr = intBuffer[readPtr];
-		//debugStr[debugStrIdx].lf = intBuffer[(readPtr + 1) % BUFF_SIZE];
-		//debugStr[debugStrIdx].readPtr = readPtr;
-		//debugStr[debugStrIdx].readPtr_1 = (readPtr + 1) % BUFF_SIZE;
-		//debugStrIdx++;
-		acc++;
+		recvBytes++;
 
 		if((CR == intBuffer[readPtr]) && (LF == intBuffer[(readPtr + 1) % BUFF_SIZE]))
 		{
 
-			//messagePointers[messageIndex].pEnd = intBuffer + readPtr;
 			auxEnd = intBuffer + readPtr;
-
-			//uint32_t beginNext = (readPtr + 2) % BUFF_SIZE;
-			//messagePointers[(messageIndex + 1) % MESSAGE_BUFFER_SIZE].pBegin = (uint8_t*)(intBuffer + beginNext);
-
 			readPtr = (readPtr + 2) % BUFF_SIZE;
 
 			messagePointers[messageIndex].pBegin = auxBegin;
@@ -87,10 +74,10 @@ uint32_t buff_RXfetch(void)
 		readPtr = (readPtr + 1) % BUFF_SIZE;
 	}
 
-	return acc;
+	return recvBytes;
 }
 
-uint32_t buff_RXcheck(char* keyWord, uint32_t lng)
+uint32_t buff_RXcompare(char* keyWord, uint32_t lng)
 {
 	uint32_t match = 0;
 
@@ -106,6 +93,7 @@ uint32_t buff_RXcheck(char* keyWord, uint32_t lng)
 				if(0 == memcmp(keyWord, pBegin, lng))
 				{
 					match = 1;
+					buff_RemoveElement(auxIdx);
 					break;
 				}
 			}
@@ -119,6 +107,7 @@ uint32_t buff_RXcheck(char* keyWord, uint32_t lng)
 				   0 == memcmp(keyWord + firstPartLng, intBuffer, lng-firstPartLng))
 				{
 					match = 1;
+					buff_RemoveElement(auxIdx);
 					break;
 				}
 			}
@@ -127,6 +116,37 @@ uint32_t buff_RXcheck(char* keyWord, uint32_t lng)
 	}
 
 	return match;
+}
+
+
+static void buff_RemoveElement(uint32_t idx)
+{
+    uint32_t outdated = 0;
+    uint32_t writeIdx = 0;
+	uint32_t readIdx = 0;
+
+    for(readIdx = 0; readIdx < messageIndex; readIdx++)
+	 {
+	     if(readIdx != idx)
+	     {
+	    	 messagePointers[writeIdx] = messagePointers[readIdx];
+	         writeIdx++;
+	     }
+	     else
+	     {
+	         outdated++;
+	     }
+	 }
+
+	 for(readIdx = (messageIndex - 1);
+			 readIdx > messageIndex - 1 - outdated;
+			 readIdx--)
+	 {
+		 messagePointers[readIdx].pBegin = NULL;
+		 messagePointers[readIdx].pEnd = NULL;
+	 }
+
+	 messageIndex -= outdated;
 }
 
 uint32_t buff_RXstart(void)

@@ -108,7 +108,7 @@ int main(void)
 			  printf("Timeout ERR\r\n");
 		  }
 
-		  if(buff_RXcheck("Hojsahej", strlen("Hojsahej")))
+		  if(buff_RXcompare("Hojsahej", strlen("Hojsahej")))
 		  {
 			  printf("Match\n");
 		  }
