@@ -16,7 +16,6 @@ static uint8_t       intBuffer[BUFF_SIZE];
 static ringBuffPtr_t messagePointers[MESSAGE_BUFFER_SIZE] = {0};
 static uint32_t      messageIndex = 0;
 static uint32_t      readPtr = 0;
-static uint32_t      bufferWrapped = 0;
 
 #define INDEX_ALREADY_WRAPPED        ((readPtr + 1) % BUFF_SIZE == 0)
 #define WRAPPED_BYTE_NOT_RECEIVED    (RX_CNT == 0)
@@ -27,6 +26,7 @@ static uint32_t      bufferWrapped = 0;
 #define MIN_UI32_LNG 1
 #define MIM_STR_LNG 1
 
+
 static void buff_RemoveElement(uint32_t idx);
 
 
@@ -36,15 +36,19 @@ uint32_t buff_RXfetch(void)
 	static uint8_t* auxBegin = intBuffer;
 	uint8_t* auxEnd = NULL;
 
+	/* When anything new received (within RX_CNT) and messagePointers still have space */
 	while(readPtr != RX_CNT && messageIndex < MESSAGE_BUFFER_SIZE)
 	{
+		/* When less than 2-bytes received or the wrapped 0th byte indexed but not received yet*/
 		if((INDEX_ALREADY_WRAPPED && WRAPPED_BYTE_NOT_RECEIVED) || RECEIVED_TOO_LESS_BYTES)
 		{
-			return 0;
+			/* Pending receive*/
+			return RX_OK;
 		}
+		/* When loop iterates for longer than possible - prevent lock here*/
 		if(recvBytes > BUFF_SIZE)
 		{
-			break;
+			return HARD_ERROR;
 		}
 		recvBytes++;
 
@@ -70,20 +74,24 @@ uint32_t buff_RXfetch(void)
 	return recvBytes;
 }
 
+
 uint32_t buff_RXcompare(char* keyWord, uint32_t lng)
 {
+
+	uint32_t match = 0;
+	uint8_t* pBegin = NULL;
+	uint8_t* pEnd = NULL;
+	uint32_t firstPartLng;
 
 	if(keyWord == NULL || lng > (BUFF_SIZE - 1))
 	{
 		return HARD_ERROR;
 	}
 
-	uint32_t match = 0;
-
 	for(uint32_t auxIdx = 0; auxIdx  < messageIndex; auxIdx++)
 	{
-		uint8_t* pBegin = messagePointers[auxIdx].pBegin;
-		uint8_t* pEnd = messagePointers[auxIdx].pEnd;
+		pBegin = messagePointers[auxIdx].pBegin;
+		pEnd = messagePointers[auxIdx].pEnd;
 
 		if(pEnd > pBegin)
 		{
@@ -99,7 +107,7 @@ uint32_t buff_RXcompare(char* keyWord, uint32_t lng)
 		}
 		else
 		{
-			uint32_t firstPartLng = BUFF_SIZE - ((uint32_t)pBegin - (uint32_t)intBuffer);
+			firstPartLng = BUFF_SIZE - (uint32_t)(pBegin - intBuffer);
 			if(lng <= firstPartLng + (pEnd - intBuffer))
 			{
 				if(0 == memcmp(keyWord, pBegin, firstPartLng) &&
@@ -120,20 +128,25 @@ uint32_t buff_RXcompare(char* keyWord, uint32_t lng)
 
 uint32_t buff_RXextractUI32(char* keyWord, uint32_t keyLng, uint32_t *num)
 {
+	uint8_t strNum[MAX_UI32_VALUE_LNG + 1] = {0};
+	uint8_t* pBegin = NULL;
+	uint8_t* pEnd = NULL;
+	uint32_t match = 0;
+	uint32_t number = 0;
+	uint32_t firstPartLng;
+	uint32_t didx = 0;
+	uint32_t wrapKeyWordLng;
+	uint32_t maxDec = 1;
 
 	if(num == NULL || keyWord == NULL || keyLng > BUFF_SIZE)
 	{
 		return HARD_ERROR;
 	}
 
-	uint32_t match = 0;
-	uint32_t number = 0;
-	uint8_t strNum[MAX_UI32_VALUE_LNG + 1] = {0};
-
 	for(uint32_t auxIdx = 0; auxIdx  < messageIndex; auxIdx++)
 	{
-		uint8_t* pBegin = messagePointers[auxIdx].pBegin;
-		uint8_t* pEnd = messagePointers[auxIdx].pEnd;
+		pBegin = messagePointers[auxIdx].pBegin;
+		pEnd = messagePointers[auxIdx].pEnd;
 
 		if(pEnd > pBegin)
 		{
@@ -165,16 +178,14 @@ uint32_t buff_RXextractUI32(char* keyWord, uint32_t keyLng, uint32_t *num)
 		}
 		else
 		{
-			uint32_t firstPartLng = BUFF_SIZE - ((uint32_t)pBegin - (uint32_t)intBuffer);
+			firstPartLng = BUFF_SIZE - ((uint32_t)pBegin - (uint32_t)intBuffer);
 			if(keyLng  + MIN_UI32_LNG <= firstPartLng + (pEnd - intBuffer))
 			{
 				if(0 == memcmp(keyWord, pBegin, keyLng) ||
 				  (0 == memcmp(keyWord, pBegin, firstPartLng) &&
 				   0 == memcmp(keyWord + firstPartLng, intBuffer, keyLng-firstPartLng)))
 				{
-					uint32_t didx = 0;
-
-					uint32_t wrapKeyWordLng = keyLng - firstPartLng;
+					wrapKeyWordLng = keyLng - firstPartLng;
 
 					/* Number starts in "first part" and continues to the second part*/
 					if(keyLng < firstPartLng)
@@ -218,7 +229,7 @@ uint32_t buff_RXextractUI32(char* keyWord, uint32_t keyLng, uint32_t *num)
 
 	if(strlen((char*)strNum))
 	{
-		uint32_t maxDec = 1;
+		maxDec = 1;
 		for(uint32_t dec = 1; dec < strlen((char*)strNum); dec++)
 		{
 			maxDec *= 10;
@@ -239,13 +250,18 @@ uint32_t buff_RXextractUI32(char* keyWord, uint32_t keyLng, uint32_t *num)
 
 uint32_t buff_RXextractString(char* keyWord, uint32_t keyLng, uint8_t *buff, uint32_t buffLng)
 {
+	uint8_t* pBegin = NULL;
+	uint8_t* pEnd = NULL;
 	uint32_t length = 0;
 	uint32_t copyLength = 0;
+	uint32_t firstPartLng;
+	uint32_t offset = 0;
+	uint32_t keyWordWrapped = 0;
 
 	for(uint32_t auxIdx = 0; auxIdx  < messageIndex; auxIdx++)
 	{
-		uint8_t* pBegin = messagePointers[auxIdx].pBegin;
-		uint8_t* pEnd = messagePointers[auxIdx].pEnd;
+		pBegin = messagePointers[auxIdx].pBegin;
+		pEnd = messagePointers[auxIdx].pEnd;
 
 		if(pEnd > pBegin)
 		{
@@ -263,7 +279,7 @@ uint32_t buff_RXextractString(char* keyWord, uint32_t keyLng, uint8_t *buff, uin
 		}
 		else
 		{
-			uint32_t firstPartLng = BUFF_SIZE - ((uint32_t)pBegin - (uint32_t)intBuffer);
+			firstPartLng = BUFF_SIZE - ((uint32_t)pBegin - (uint32_t)intBuffer);
 			if(keyLng  + MIM_STR_LNG <= firstPartLng + (pEnd - intBuffer))
 			{
 				if(0 == memcmp(keyWord, pBegin, keyLng) ||
@@ -271,8 +287,8 @@ uint32_t buff_RXextractString(char* keyWord, uint32_t keyLng, uint8_t *buff, uin
 				   0 == memcmp(keyWord + firstPartLng, intBuffer, keyLng-firstPartLng)))
 				{
 
-					uint32_t offset = 0;
-					uint32_t keyWordWrapped = 0;
+					offset = 0;
+					keyWordWrapped = 0;
 					if(keyLng < firstPartLng)
 					{
 						offset = firstPartLng - keyLng;
@@ -286,8 +302,8 @@ uint32_t buff_RXextractString(char* keyWord, uint32_t keyLng, uint8_t *buff, uin
 						keyWordWrapped = keyLng - firstPartLng;
 					}
 
-					copyLength = (buffLng - copyLength) <= ((pEnd - intBuffer))
-							   ? (buffLng - copyLength) : (pEnd - intBuffer);
+					copyLength = (buffLng - copyLength) <= ((pEnd - intBuffer) - keyWordWrapped)
+							   ? (buffLng - copyLength) : (pEnd - intBuffer) - keyWordWrapped;
 					memcpy(buff + offset, intBuffer + keyWordWrapped, copyLength);
 					length += copyLength;
 					buff_RemoveElement(auxIdx);
@@ -300,6 +316,7 @@ uint32_t buff_RXextractString(char* keyWord, uint32_t keyLng, uint8_t *buff, uin
 
 	return length;
 }
+
 
 static void buff_RemoveElement(uint32_t idx)
 {
@@ -338,10 +355,13 @@ static void buff_RemoveElement(uint32_t idx)
 	 messageIndex -= outdated;
 }
 
+
 uint32_t buff_RXcopyString(uint8_t* buff, uint32_t buffLng)
 {
-
+	uint8_t* pBegin = NULL;
+	uint8_t* pEnd = NULL;
 	uint32_t length = 0;
+	uint32_t firstPartLng;
 
 	if(buff == NULL || buffLng > BUFF_SIZE)
 	{
@@ -350,14 +370,14 @@ uint32_t buff_RXcopyString(uint8_t* buff, uint32_t buffLng)
 
 	for(uint32_t auxIdx = 0; auxIdx  < messageIndex; auxIdx++)
 	{
-		uint8_t* pBegin = messagePointers[auxIdx].pBegin;
-		uint8_t* pEnd = messagePointers[auxIdx].pEnd;
+		pBegin = messagePointers[auxIdx].pBegin;
+		pEnd = messagePointers[auxIdx].pEnd;
 
 		if(pEnd > pBegin)
 		{
 			if(buffLng < (pEnd - pBegin) + TERMINATION_LNG)
 			{
-				length = (uint32_t)(-1);
+				length = HARD_ERROR;
 				break;
 			}
 
@@ -369,11 +389,11 @@ uint32_t buff_RXcopyString(uint8_t* buff, uint32_t buffLng)
 		else
 		{
 
-			uint32_t firstPartLng = BUFF_SIZE - ((uint32_t)pBegin - (uint32_t)intBuffer);
+			firstPartLng = BUFF_SIZE - ((uint32_t)pBegin - (uint32_t)intBuffer);
 
 			if(buffLng < firstPartLng + (pEnd - intBuffer) + TERMINATION_LNG)
 			{
-				length = (uint32_t)(-1);
+				length = HARD_ERROR;
 				break;
 			}
 
@@ -388,6 +408,7 @@ uint32_t buff_RXcopyString(uint8_t* buff, uint32_t buffLng)
 	return length;
 }
 
+
 void buff_RXflush(void)
 {
 	for(uint32_t idx = 0; idx < messageIndex; idx++)
@@ -399,10 +420,10 @@ void buff_RXflush(void)
 	messageIndex = 0;
 }
 
+
 uint32_t buff_RXstart(void)
 {
-	HAL_UART_Receive_DMA(&huart3, intBuffer, BUFF_SIZE);
-	return 0;
+	return (uint32_t)HAL_UART_Receive_DMA(&huart3, intBuffer, BUFF_SIZE);
 }
 
 
@@ -413,10 +434,6 @@ int _write(int file, char *ptr, int len)
 }
 
 
+/*
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-	if(huart->Instance == USART3)
-	{
-		bufferWrapped = 1;
-	}
-}
+*/
