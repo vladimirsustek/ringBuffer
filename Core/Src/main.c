@@ -124,7 +124,7 @@ int main(void)
 		  if(value > 0)
 		  {
 			  name[value] = '\0';
-			  printf("Name= %s\r\n", (char*)name);
+			  printf("Name=%s\r\n", (char*)name);
 		  }
 		  value = buff_RXcopyString(name, 16);
 		  if(value > 0)
@@ -134,6 +134,7 @@ int main(void)
 		  }
 	  }
 
+	  HAL_Delay(100);
   }
   /* USER CODE END 3 */
 }
