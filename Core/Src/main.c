@@ -112,7 +112,7 @@ int main(void)
 
 		  if(buff_RXcompare("Hojsahej", strlen("Hojsahej")))
 		  {
-			  printf("Match\n");
+			  printf("Match\r\n");
 		  }
 
 		  if(buff_RXextractUI32("Value=", strlen("Value="), &value))

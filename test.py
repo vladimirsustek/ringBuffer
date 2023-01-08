@@ -15,8 +15,10 @@ while iter < 2400:
 
     time.sleep(0.250)
     num = random.randint(0, 99999)
-
-    if iter % 5 == 0:
+    
+    if iter % 10 == 0:
+        send = "Hojsahej" + '\r\n'
+    elif iter % 4 == 0:
         send = "Name=" + names[idx] + '\r\n'
         idx = (idx + 1) % 5
     else:
@@ -29,6 +31,8 @@ while iter < 2400:
 
     if len(receive) == 0:
         result = "Timeout\r\n"
+    elif receive.decode('utf-8') == 'Match\r\n':
+        result = "OK: " + receive.decode('utf-8').rstrip()
     elif receive == send:
         result = "OK: " + receive.decode('utf-8').rstrip()
     elif receive.decode('utf-8')[0:10] + '\r\n' == send.decode('utf-8')[0:10] + '\r\n':
