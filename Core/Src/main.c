@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "dma.h"
+#include "i2c.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -88,11 +89,27 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
   MX_USART3_UART_Init();
+  MX_DMA_Init();
+  MX_I2C4_Init();
   /* USER CODE BEGIN 2 */
   buff_RXstart();
   printf("Started %ld\r\n", HAL_GetTick());
+
+  HAL_GPIO_WritePin(V3V3_GPIO_Port, V3V3_Pin, GPIO_PIN_SET);
+  HAL_Delay(100);
+
+
+  for (uint16_t addr = 0; addr < 0xFF; addr++)
+  {
+	  uint8_t rx = HAL_I2C_IsDeviceReady(&hi2c4, addr << 1, 10, 100);
+
+	  if(rx == 0)
+	  {
+		  printf("OK 0x%02x\r\n", addr);
+	  }
+
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -105,6 +122,8 @@ int main(void)
 	  rxBytes = buff_RXfetch();
 	  if(rxBytes)
 	  {
+		  HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
+
 		  if(rxBytes > BUFF_SIZE)
 		  {
 			  printf("Timeout ERR\r\n");
